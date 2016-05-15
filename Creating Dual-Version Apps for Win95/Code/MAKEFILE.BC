@@ -1,0 +1,35 @@
+#
+# Makefile for Borland C/C++ 4.x
+#
+CC = bcc
+LN = tlink
+RC = brcc
+RL = rlink
+
+CCFLAGS = /c /ms /WE /w /DSTRICT /I$(INCLUDE)
+LNFLAGS = /m /Twe /L$(LIB)
+RCFLAGS = 
+RLFLAGS = /31
+
+OBJ_FILES = demo.obj ewv.obj
+LIB_FILES = cws.lib import.lib
+
+all : demo.exe
+
+.cpp.obj :
+        $(CC) $(CCFLAGS) $<
+
+ewv.obj : ewv.cpp ewv.h
+
+demo.obj : demo.cpp demo.h ewv.h
+
+demo.bin : $(OBJ_FILES) demo.def
+        $(LN) $(LNFLAGS) c0ws $(OBJ_FILES),$@,demo.map,$(LIB_FILES),demo.def
+
+demo.res : demo.rc demo.h
+        $(RC) $(RCFLAGS) demo.rc
+
+demo.exe : demo.bin demo.res
+        @copy demo.bin $@
+        $(RL) $(RLFLAGS) demo.res $@
+

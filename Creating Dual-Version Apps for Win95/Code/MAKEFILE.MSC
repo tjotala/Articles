@@ -1,0 +1,35 @@
+#
+# Makefile for Microsoft Visual C/C++ 1.5x
+#
+CC = cl
+LN = link
+RC = rc
+RL = rc
+
+CCFLAGS = /nologo /c /AS /GA /W4 /DSTRICT
+LNFLAGS = /nologo /map
+RCFLAGS = /nologo /r
+RLFLAGS = /nologo /31
+
+OBJ_FILES = demo.obj ewv.obj
+LIB_FILES = slibcew.lib libw.lib
+
+all : demo.exe
+
+.cpp.obj :
+        $(CC) $(CCFLAGS) $<
+
+ewv.obj : ewv.cpp ewv.h
+
+demo.obj : demo.cpp demo.h ewv.h
+
+demo.bin : $(OBJ_FILES) demo.def
+        $(LN) $(LNFLAGS) $(OBJ_FILES),$@,demo.map,$(LIB_FILES),demo.def
+
+demo.res : demo.rc demo.h
+        $(RC) $(RCFLAGS) demo.rc
+
+demo.exe : demo.bin demo.res
+        @copy demo.bin $@
+        $(RL) $(RLFLAGS) demo.res $@
+

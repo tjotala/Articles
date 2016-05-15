@@ -1,0 +1,44 @@
+#
+# Makefile for Watcom C/C++ 10.x
+#
+CC = wpp
+LN = wlink
+RC = wrc
+RL = wrc
+
+CCFLAGS = /zq /bt=win /ms /w4 /DSTRICT
+LNFLAGS =
+RCFLAGS = /q /r
+RLFLAGS = /q /31
+
+OBJ_FILES = demo.obj ewv.obj
+LIB_FILES = cplxs.lib windows.lib
+
+all : demo.exe
+
+.cpp.obj :
+        $(CC) $(CCFLAGS) $<
+
+ewv.obj : ewv.cpp ewv.h
+
+demo.obj : demo.cpp demo.h ewv.h
+
+demo.bin : $(OBJ_FILES) demo.def
+        @echo format windows > wlink.tmp
+        @echo name $@ >> wlink.tmp
+        @echo option quiet,map >> wlink.tmp
+        @for %f in ($(OBJ_FILES)) do @echo file %f >> wlink.tmp
+        @for %f in ($(LIB_FILES)) do @echo library %f >> wlink.tmp
+        @echo import GetExePtr KERNEL.133 >> wlink.tmp
+        @echo segment type code preload moveable shared executeread discardable >> wlink.tmp
+        @echo segment type data preload moveable nonshared readwrite >> wlink.tmp
+        $(LN) $(LNFLAGS) @wlink.tmp
+        @del wlink.tmp
+
+demo.res : demo.rc demo.h
+        $(RC) $(RCFLAGS) demo.rc
+
+demo.exe : demo.bin demo.res
+        @copy demo.bin $@
+        $(RL) $(RLFLAGS) demo.res $@
+
