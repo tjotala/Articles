@@ -1,0 +1,8 @@
+; MyPicSwitch.def : Declares module parameters and exports
+LIBRARY "MyPicSw.DLL"
+DESCRIPTION "My Pictures Switch Shell Extension"
+VERSION 1.0
+EXPORTS
+    DllCanUnloadNow              @1 PRIVATE
+    DllGetClassObject            @2 PRIVATE
+    RunDLL_CreateNewMyPicsFolder @3 PRIVATE

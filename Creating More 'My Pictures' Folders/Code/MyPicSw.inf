@@ -1,0 +1,66 @@
+; MyPicSw.inf : Installation script
+[Version]
+Signature = "$Chicago$"
+Provider = "Tapani Otala"
+
+[DefaultInstall]
+CopyFiles = FILE_LIST
+AddReg = ADD_REGISTRY_LIST
+
+[DefaultUninstall]
+DelFiles = FILE_LIST
+DelReg = DEL_REGISTRY_LIST
+
+[FILE_LIST]
+MyPicSw.dll
+MyPicSw.inf
+
+[ADD_REGISTRY_LIST]
+HKCR, "CLSID\%MODULE_CLSID%", , 0, "%MODULE_LNAME%"
+HKCR, "CLSID\%MODULE_CLSID%\InprocServer32", , 0, "%11%\ShellExt\MyPicSw.dll"
+HKCR, "CLSID\%MODULE_CLSID%\InprocServer32", "ThreadingModel", 0, "Apartment"
+HKCR, "%KEY_FOLDER%\%MODULE_SNAME%", , 0, "%MODULE_CLSID%"
+HKCR, "%KEY_DIRECTORY%\%MODULE_SNAME%", , 0, "%MODULE_CLSID%"
+HKCR, "%MODULE_EXT%", , 0, "%MODULE_SNAME_NEW%"
+HKCR, "%MODULE_EXT%\ShellNew", "Command", 0, "rundll32.exe %11%\ShellExt\MyPicSw.dll,RunDLL_CreateNewMyPicsFolder %%1"
+HKCR, "%MODULE_EXT%\ShellNew\Config", "NoExtension", 0, ""
+HKCR, "%MODULE_SNAME_NEW%", , 0, "%MODULE_LNAME_NEW%"
+HKCR, "%MODULE_SNAME_NEW%\DefaultIcon", , 0, "%11%\mydocs.dll,1"
+HKCR, "%MODULE_SNAME_NEW%\shell\open\command", , 0, "explorer.exe %1"
+HKLM, "%KEY_APPROVED%", "%MODULE_CLSID%", 0, "%MODULE_LNAME%"
+HKLM, "%KEY_UNINSTALL%\%MODULE_SNAME_UNINSTALL%", "DisplayName", 0, "%MODULE_LNAME_UNINSTALL%"
+HKLM, "%KEY_UNINSTALL%\%MODULE_SNAME_UNINSTALL%", "UninstallString", 0, "rundll32.exe setupapi.dll,InstallHinfSection DefaultUninstall 132 %11%\ShellExt\MyPicSw.inf"
+
+[DEL_REGISTRY_LIST]
+HKCR, "CLSID\%MODULE_CLSID%"
+HKCR, "%KEY_FOLDER%\%MODULE_SNAME%"
+HKCR, "%KEY_DIRECTORY%\%MODULE_SNAME%"
+HKCR, "%MODULE_EXT%"
+HKCR, "%MODULE_SNAME_NEW%"
+HKLM, "%KEY_APPROVED%", "%MODULE_CLSID%"
+HKLM, "%KEY_UNINSTALL%\%MODULE_SNAME_UNINSTALL%"
+
+[SourceDisksNames]
+1 = "%MODULE_DNAME%", "", 0
+
+[SourceDisksFiles]
+MyPicSw.dll = 1
+MyPicSw.inf = 1
+
+[DestinationDirs]
+FILE_LIST = 11, ShellExt
+
+[Strings]
+MODULE_DNAME = "'My Pictures' Folder Switch Shell Extension"
+MODULE_SNAME = "MyPicSwitch"
+MODULE_SNAME_NEW = "MyPicSwitch"
+MODULE_SNAME_UNINSTALL = "MyPicSwitch"
+MODULE_LNAME = "'My Pictures' Folder Switch Shell Extension"
+MODULE_LNAME_NEW = "'My Pictures' Folder"
+MODULE_LNAME_UNINSTALL = "'My Pictures' Folder Switch (Remove Only)"
+MODULE_CLSID = "{C64FC7E8-6F17-4612-B6C0-33F33944B09B}"
+MODULE_EXT = ".mpfsse"
+KEY_FOLDER = "Folder\shellex\ContextMenuHandlers"
+KEY_DIRECTORY = "Directory\shellex\ContextMenuHandlers"
+KEY_APPROVED = "Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved"
+KEY_UNINSTALL = "Software\Microsoft\Windows\CurrentVersion\Uninstall"

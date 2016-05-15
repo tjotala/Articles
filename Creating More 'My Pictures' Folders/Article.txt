@@ -1,0 +1,124 @@
+Creating More 'My Pictures' Folders
+
+Introduction
+
+Both Windows 2000 and the upcoming Windows Millenium Edition feature a new standard shell folder called "My Pictures". This folder is a perfectly normal file system folder, yet when the shell's Web View setting is enabled it includes a convenient image preview window as shown in Figure 1. Simply select an image file and you will get an instant preview of it, along with the dimensions of the image as well as the usual vital stats such as creation date/time, etc. You can zoom in and out, fit the image to the preview window, view it actual size or full screen, or even print it.
+
+The only problem with this feature is that it is by default enabled only within the new "My Pictures" folder. You can enable this feature in any other folder by using the "Customize This Folder..." command from the Explorer's View menu as shown in Figure 2. Unfortunately this requires no less than 5 steps and even worse, it only works on a single folder at a time. This may not seem like a bad thing unless you work and play with digital imaging devices on daily basis like I do. Having accumulated thousands of images thus far, I needed a little bit more functionality and convenience than what is offered by the base operating system.
+
+In this article I will present a small utility that will allow you to enable or disable the image preview feature in any number of folders with a single menu selection. As an added bonus, I'll throw in a method for creating new folders with the image preview feature already enabled.
+
+Background
+
+There is nothing magical about the technology behind the image preview feature. The basic mechanics of the Web View are described quite well in [1], and [2] in particular contains an excellent technical description of it so I won't waste space repeating it here. I'll just summarize it by saying that basically what you see in a Web View enabled folder is based on a Hypertext Template File (*.HTT) that contains CSS declarations, JavaScript snippets, HTML tags, and most importantly references to ActiveX controls such as the file list view in the right pane, or the image preview control in the left pane. In the case of the "My Pictures" folder, the default template file is named %TEMPLATEDIR%\ImgView.htt where TEMPLATEDIR is defined as %WINDIR%\Web where WINDIR in turn is defined as the Windows folder (typically either C:\WINDOWS or C:\WINNT depending on your platform). The TEMPLATEDIR is one of three system variables available within Web View template files that allow you to create generic location-independent templates. The other two variables are apptly named THISDIRNAME and THISDIRPATH. Note that there is nothing stopping you from customizing the ImgView.htt file, or creating your own templates as described in [2].
+
+The concept of the template file seems straightforward enough, but how does the Explorer know which template file (if any) to use for each folder? First, the folder itself has to be marked read-only. Second, the folder must contain a hidden system file named DESKTOP.INI that identifies among other things the template file. Together these two characteristics identify the folder as having an "extended shell view", in other words the Web View. Note that depending on the contents of the DESKTOP.INI file, these same characteristics could also identify the folder as a junction point for a shell namespace extension such as the Recycle Bin or the Briefcase. Unfortunately that topic is beyond the scope of this article, so instead I'll refer you to [3] and [4] for more information in case you are interested.
+
+Solution
+
+My primary goal was to easily enable the image preview feature in any folder. That boils down to performing the following basic tasks:
+
+1) Locate the folder(s)
+
+2) In each folder, create a hidden system file named DESKTOP.INI that contains the correct settings
+
+3) Mark the folder(s) as read-only
+
+My secondary goal was to enable the creation of new folders with the image preview feature already enabled. The requirements for that goal are basically the same as above except that instead of locating the folder I need to locate the parent folder, and create a new folder in it.
+
+Obviously I could have written a normal Win32 application to accomplish my goals, but what is the fun in that? I thought that interfacing the functionality directly with the shell itself would be a much more intuitive way. In other words, I wanted to able to make the necessary changes with no more effort than it takes to rename or delete the folder. Thus, the natural choice for the implementation was a context menu shell extension that adds a new menu item in the context menu for all folders as shown in Figure 3.
+
+Implementing The Context Menu Shell Extension
+
+Implementing a shell extension is pretty straightforward if you are familiar with COM since the shell relies heavily on it. The trick is mainly navigating the disjointed and oftentimes confusing Microsoft documentation. In a nutshell, first you create a COM in-process server (i.e. a DLL) that supports several pre-defined COM interfaces defined in the Platform SDK header file SHLOBJ.H. Next, the server must be registered both under the HKEY_CLASSES_ROOT\CLSID key as well as under the key(s) for the shell objects that it supports, for example HKEY_CLASSES_ROOT\.ext\ShellEx\ContextMenu in the case of context menu shell extensions (where .ext is the filename extension). Once the server is registered, the shell will automatically load and unload the shell extension and invoke the appropriate interfaces as needed. The minimum required interfaces for my context menu shell extension are IShellExtInit and IContextMenu. As the names suggest, the former is used only to initialize the shell extension, and the latter is used to actually provide the context menu functionality.
+
+I used the Microsoft ATL framework in the implementation in order to avoid writing the boilerplate COM code such as the mandatory IUnknown and IClassFactory interfaces and reference counting. I started out by creating as simplistic an ATL project as possible with a single "Simple Object" class. Since I was going to implement pre-defined interfaces that only the shell cares about, I removed all the excess baggage generated by the ATL wizard: the IDL declarations, the proxy/stub code and the type library. Then I removed all code and resources related to the server's self-registration and un-registration because I decided to use an INF file for installation (more on this later). The resulting code can be seen in MyPicSw.cpp (Listing 1) and ShellExt.cpp (Listing 2), with declarations in ShellExt.h (Listing 3).
+
+The MyPicSw.cpp file contains the minimum exported functions required of any COM in-process server, namely DllCanUnloadNow and DllGetClassObject. They require no special handling beyond calling the appropriate ATL utility functions to handle the boilerplate work. While the DllMain function is not relevant for COM, it is important in calling the appropriate ATL initialization and termination functions. I also included code in DllMain to verify that it is in fact running on Win2K or WinME in order to later avoid calling the SHGetSpecialFolderPath function with the CSIDL_MYPICTURES parameter that is not supported on the older platforms. The file also contains an additional exported utility function RunDLL_CreateNewMyPicsFolder that is not related to COM or the context menu shell extension in any way. I'll explain this function in more detail later.
+
+The ShellExt.cpp file contains the implementation of the CShellExt class defined in ShellExt.h (Listing 3). This class is derived from several ATL base classes, as well as the two pre-defined shell interfaces I mentioned earlier, IShellExtInit and IContextMenu. Given that ATL provides all the boilerplate COM code, the implementation in ShellExt.cpp focuses solely on the four methods defined for those two interfaces.
+
+In order to examine the functions in ShellExt.cpp, it is useful to understand the flow of control. Note that I've intentionally simplified the flow of control somewhat to concentrate on the relevant parts. When the user selects one or more shell objects and right-clicks on them, the following events occur for each shell extension registered for the object types represented by the selected objects:
+
+1. The shell calls CoGetClassObject to load the COM inproc server and get the IClassFactory interface pointer.
+
+2. The shell calls IClassFactory::CreateInstance to instantiate a IShellExtInit interface.
+
+3. The shell calls IShellExtInit::Initialize to initialize the shell extension by passing it the list of selected objects in the form a IDataObject interface pointer that can provide the list in a variety of different formats.
+
+4. The shell calls IShellExtInit::QueryInterface to get a IContextMenu interface pointer.
+
+5. The shell calls IContextMenu::QueryContextMenu to allow the shell extension to add one or more items to the context menu.
+
+6. The shell may or may not call IContextMenu::GetCommandString to request additional strings such as language-independent verbs or one line help messages related to the newly added menu items.
+
+7. Finally, if the user selects one of the menu items added by the shell extension, the shell calls IContextMenu::InvokeCommand to execute that command.
+
+8. The shell calls IUnknown::Release on all of the interfaces it holds.
+
+9. The shell calls DllCanUnloadNow to query if the COM inproc server can be unloaded, and unloads the server if the function returns TRUE.
+
+It is important to note that the shell may postpone steps 8 and 9 quite a bit in the hopes that the shell extension is needed again and thus won't need to be reloaded. As a developer you may find it very useful to set the registry setting HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer\AlwaysUnloadDll to any value, thus causing the shell to unload shell extensions faster.
+
+In the case of my shell extension, the CShellExt::Initialize method calls the IDataObject::GetData method to get the item list in the more convenient CF_HDROP clipboard format expected by the DragQueryFile function. Hence my CShellExt::QueryContextMenu method can iterate through the item list by using the DragQueryFile function rather than bother with typecasts and ugly pointer arithmetic. The goal of the iteration is to count the number of folders that are already using the image preview feature. Note that the IsMyPicsFolder function from Util.cpp (Listing 4) is by no means bullet proof: it does correctly determine if the folder has the characteristics of a web view folder, but it does not check to see if the web view is specifically the one used by the "My Pictures" folder. I did not consider the distinction significant enough to warrant a more detailed check. At any rate, once the items have been examined the CShellExt::QueryContextMenu method adds the new menu item "View as 'My Pictures'" and selects one of three possible checkmarks to use depending on the count. The end result is that the menu item appears and acts as if it was a tri-state checkbox:
+
+* No checkmark: none of the selected folders have image preview enabled. If the menu item is selected, enables image preview in all selected folders.
+
+* Gray checkmark: some but not all of the selected folders have image preview enabled. If the menu items is selected, enables image preview in all selected folders.
+
+* Black checkmark: all of the selected folders have image preview enabled. If the menu item is selected, disables image preview in all selected folders.
+
+The folder transformation is carried out in the CShellExt::InvokeCommand method, which the shell will call if the user selects the menu item. When that happens, my code again iterates over the list of selected folders and applies the rule described above. Note that this function does not apply the rules recursively to the subfolders of the selected folders as do most other similar shell operations such as erasing files or changing file attributes. Adding support for recursion would be a fairly easy modification but I did not consider it worth the extra lines of code.
+
+The source file Util.cpp (Listing 4) contains several utility functions used by code in MyPicSw.cpp and ShellExt.cpp. Except for the general purpose ShowErrorMessage function, all other functions are related to the maintenance of folders. The MakeDesktopIniName function creates a fully qualified path to a DESKTOP.INI file given the folder path. IsMyPicsFolder in turn examines the given folder to see if it matches the characteristics of a folder with Web View enabled. The MakeMyPicsFolder and UnmakeMyPicsFolder functions in turn perform exactly what the names imply.
+
+When I was writing the MakeMyPicsFolder function I thought about either creating the DESKTOP.INI file from a string resource, or copying a seed file from the installation folder of my shell extension DLL. However, I quickly realized that both of these approaches had one serious drawback: I would have to carry around two copies of the file, one for Win2K and one for Win9x since the file contents differ ever so slightly between the two platforms. Another equally unpleasant option would have been to carry around a master file and apply changes to it to adapt it for each platform. Instead I opted to locate the user's main "My Pictures" folder using the SHGetSpecialFolderPath function and copy the DESKTOP.INI file from that folder, thus avoiding some ugly platform-specific code. The drawback of this method is the slim chance that the "My Pictures" folder is no longer enabled with the Web View thus eliminating the DESKTOP.INI file, but I considered this a low risk given the goals of the utility. It is also worth noting that the CSIDL_MYPICTURES constant and several others like it are not available in older versions of the Platform SDK header files, and in fact it is not recognized at all by older versions of SHELL32.DLL. Apparently Microsoft considers this problem significant enough to include a separate re-distributable patch called SHFolder in the April 2000 version of the Platform SDK. Since the operating environment of this utility is Win2K and WinME, this should not be a problem.
+
+Implementing File|New
+
+In addition to being able to enable the image preview for existing folders, I also wanted to be able to create new folders with the image preview already enabled. I could have just added another menu item into the folder context menu that when invoked would create a new folder with the proper settings. Unfortunately this approach suffers from three drawbacks:
+
+* It makes the initial folder context menu even longer than it already is after installing a few popular applications such as WinZip, Winamp or Paint Shop Pro.
+
+* It would only be available in the context menu when right-clicking on an existing folder's icon and not in the context menu that appears when right-click within the parent folder itself.
+
+* Perhaps most importantly it would not appear in the File|New submenu of the Windows Explorer, thus limiting its availability.
+
+Instead I decided to add an item into the File|New submenu thus automatically enabling it everywhere where you can create a normal folder (see Figure 4). In order to add a new item to the File|New submenu, you have two choices: a) add an empty file of the desired file type in the %WINDIR%\ShellNew folder, or b) add a subkey named ShellNew under HKEY_CLASSES_ROOT\.ext where ".ext" is the extension of the desired file type, and the values under that subkey determine how to create the new file. The latter choice may explain why the shell takes some time to display the File|New submenu: it has to enumerate all the keys under HKEY_CLASSES_ROOT to find the ones that have a "ShellNew" subkey. On my relatively new Win2K system I counted more than 500 registered file types!
+
+Unfortunately neither one of these options seemed applicable in my case since I needed to create a new folder instead of a new file. Then I realized that the Briefcase virtual folder faces the same dilemma and provides a solution. It turns out that the solution is to pick what is essentially a bogus file type (e.g. ".bfc" for Briefcase) and register it in the registry under HKEY_CLASSES_ROOT as if it was a real file type. However, instead of specifying the name of an empty file to use as a template for the new file, you specify a command line to be executed by the shell. The downside of this mechanism is that since it involves launching a separate application, the shell apparently loses any interest in the new item after it has been created. In other words, unlike with other new items created with the File|New submenu, the shell will not automatically select the new item and switch to the rename mode assuming you'll want to change the default "New XXXX" name generated by the shell. I spent some time trying to figure out a reasonably neat way to solve this limitation, but failed to come up with anything resembling elegant. My only consolation is that the same limitation applies to newly created Briefcases as well.
+
+Once the bogus file type (in my case, ".mpfsse") is properly registered, the flow of control is fairly straightforward. When the user selects the File|New submenu and picks the "'My Pictures' Folder" menu item, the shell obediently launches RUNDLL32.EXE described in [6] and passes it the name of my shell extension DLL and name of the entry point, RunDLL_CreateNewMyPicsFolder, and the new folder name which defaults to "New 'My Pictures' Folder". The RunDLL_CreateNewMyPicsFolder function from MyPicSw.cpp (Listing 1) then simply creates a new folder by calling the CreateDirectory function and enables the image preview in it by calling the MakeMyPicsFolder function from Util.cpp (Listing 4).
+
+Installation
+
+Installing the shell extension requires manipulation of several registry keys as well as copying a couple of files. I thought about using the registration script support provided by ATL but decided against it because of the following reasons:
+
+a) It does not support file copying and erasing.
+
+b) It increases the memory footprint of the shell extension.
+
+Thus, all the installation work is done in MyPicSw.inf (Listing 5) file that copies the files to the appropriate location and updates the registry. The user only needs to right-click on the INF file and select "Install" from the context menu. Later, if the user selects the "My Pictures Folder Switch (Remove Only)" item in Control Panel's "Add/Remove Programs" applet, the same INF file is used to delete the installed files and remove the registry entries. The INF file is especially convenient since I do not need to worry about trying to erase the DLL from within the DLL itself - as with most things in Windows, it is possible but requires some ugly platform-specific coding.
+
+One final note about the installation: on Win2K, the user must be logged in as an administrator since the installation script modifies registry keys that are protected from mere mortals.
+
+Conclusions
+
+In this article I presented several useful technologies: the general concepts of a context menu shell extension, the ability to apply a particular web view to a folder, and the ability to add non-file items through the shell's File|New submenu. It is important to realize that these mechanisms could be applied equally to well to enabling any other pre-defined web view, not just the one used by the "My Pictures" folder. In fact, all it would really take is to change the CSIDL_xxx parameter in the call to the SHGetSpecialFolderPath function within the MakeMyPicsFolder function.
+
+I have tested the utility on both the final version of Win2K as well as WinME build 2499.3. Please note that while I am reasonably confident it will work on the final version of WinME, I cannot guarantee it.
+
+References
+
+[1] "Web View: A New Look for Microsoft Internet Explorer 4.0 Folders" by Michael Edwards, http://msdn.microsoft.com/workshop/Author/script/folders.asp
+
+[2] "More Windows 2000 UI Goodies: Extending Explorer Views by Customizing Hypertext Template Files" by Dino Esposito, MSDN Magazine, June 2000, Volume 15, Number 6 (http://msdn.microsoft.com/msdnmag/issues/0600/w2kui2/w2kui2.asp)
+
+[3] "Creating Shell Namespace Extensions", http://msdn.microsoft.com/library/psdk/shellcc/shell/Shell_Adv/namespace.htm
+
+[4] "Shell Namespace Extensions" by Krishna Kotipalli, http://msdn.microsoft.com/library/periodic/period99/faq0399.htm
+
+[5] "Specifying a Namespace Extension's Location", http://msdn.microsoft.com/library/psdk/shellcc/shell/Shell_Adv/nse_junction.htm
+
+[6] "The Windows 95 RUNDLL and RUNDLL32 Interface", Microsoft KnowledgeBase Article ID Q164787
+
