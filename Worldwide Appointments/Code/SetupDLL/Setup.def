@@ -1,0 +1,3 @@
+LIBRARY Setup
+EXPORTS Install_Init @1 PRIVATE
+        Uninstall_Init @2 PRIVATE

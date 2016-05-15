@@ -1,0 +1,136 @@
+Worldwide Appointments
+
+By Tapani J. Otala
+
+( Microsoft eMbedded Visual Tools 3.0
+( Microsoft Visual C++ 6.0 with Microsoft Windows CE Toolkit for Visual C++ 6.0
+
+Introduction
+
+Windows CE includes a World Clock applet that allows you to view the time and date in two cities labeled "Home" and "Visiting" simultaneously. If you switch the view from one city to another or change the city in the currently selected view, all your appointments in Pocket Outlook Calendar will automatically display adjusted with respect to the new time zone. For example, let's say you live in San Francisco and you are planning a trip to New York City. In anticipation to your trip, you'd want to enter your itinerary and meeting schedule in the local times for the east coast. You could switch the World Clock to the east coast time, enter the appointments and then switch back to the west coast time. This would cause the appointment times to display using west coast time for now, but once you land in New York you can simply switch the clock to east coast time and all is well.
+
+Well, almost. Unfortunately at least on my HP Jornada 430se device, the switch from one time zone to another is excruciatingly slow. Moreover, every once in a while it throws the Pocket Outlook Calendar application into a mysterious loop that ties up the entire device and takes a soft reset to unwind. Besides, while you are doing this time zone dance, your alarms and appointments that would normally apply to the local time zone will not occur as expected. More convenient solutions would be if the Pocket Outlook Calendar allowed you to enter appointments using a time zone indicator that automatically adjusts the entered time relative to the current time zone, or to be able to move existing appointments to a new time zone.
+
+In this article I will present a tiny utility that will allow you to conveniently move appointments from the current city (i.e. time zone) to any other city known to Windows CE.
+
+Background
+
+I needed two ways to integrate with the Pocket Outlook Calendar. First, I needed to be able to somehow attach to the application itself in order to provide the functionality as conveniently as possible. Second, I needed to be able to examine and modify the appointments stored in the Calendar.
+
+Fortunately, Microsoft foresaw both needs and came up with a Pocket Outlook Object Model (POOM) SDK. The alternative would have been to resort to window sub-classing and reverse-engineering the Calendar database format. While both are certainly feasible, they are hazardous given that Microsoft might suddenly decide to change the applications and database formats. The POOM SDK is a much safer solution although it still involves deciphering some pretty skimpy documentation and living with its limitations and apparent bugs. You can find a fairly good write-up on the subject of POOM SDK at [1] as well as in the help file that comes with the new Microsoft eMbedded Visual Tools 3.0.
+
+The POOM SDK provides three important items. First, it tells you how to attach your code to the various Pocket Outlook applications - in other words, Contacts, Calendar and Tasks (strangely, the Inbox is not included). Second, it describes the Pocket Outlook Object Model, which is somewhat different from its desktop cousin, the Outlook Object Model. Third, it includes re-distributable PIMSTORE.DLL files for six different CPU platforms. Each DLL is a self-registering COM in-process server, so installing it is a snap.
+
+Solution
+
+My utility takes the form of a POOM SDK-compliant DLL that attaches itself to the Pocket Outlook Calendar application's "Tools" menu as shown in Figure 1. If you select an appointment and click on "Move...", then the utility displays the dialog box shown in Figure 2 that lists all the cities known to Pocket Outlook. The default selection is the current city in case you accidentally click on the OK button but it would have been equally easy to make the default selection be the other city currently selected in World Clock, or any other city for that matter. Note that current city is not necessarily the "Home City" - it could just as well be the "Visiting City", depending on the selection in World Clock.
+
+In order to compile the code included in the code archive, you will need to define three environment variables. I used them to make the project location independent with respect to the various bits and pieces of Windows CE tools and POOM SDK needed. The environment variables are:
+
+* POOMSDK - specifies the folder in which the POOM SDK is installed, typically "C:\Program Files\Microsoft Windows CE Tools\POOM SDK". This folder contains the PIMSTORE.H and PIMSTORE_xxx.DLL files needed by the project.
+
+* CABWIZ - specifies the folder in which the Cabinet Wizard files are installed, "C:\Program Files\Microsoft Windows CE Tools\wce300\MS Pocket PC\support\ActiveSync\windows ce application installation\cabwiz". This folder contains the CABWIZ.EXE, CABWIZ.DDF and MAKECAB.EXE files needed to build cabinet files.
+
+* CESETUP - specifies the folder in which the CE_SETUP.H header file resides, typically "C:\Program Files\Microsoft Windows CE Tools\wce300\MS Pocket PC\support\ActiveSync\inc". This header file is used during installation.
+
+Attaching to The Calendar Application
+
+The POOM SDK documentation states that an extension DLL that is to be attached to the Pocket Outlook applications needs to export one function: CePimCommand. Its prototype is defined as:
+
+void CePimCommand(HWND hWnd, PIMTYPE ptData, UINT uDataCount,
+ HANDLE *rghData, void *pReserved);
+
+There are a couple of problems with this definition:
+
+1. The calling convention is not declared, so it is open to interpretation. I assumed it to be WINAPI (i.e. __stdcall), and so far that assumption has proven to be correct.
+
+2. The definition of the enumerated type PIMTYPE changed between Palm-size PC v1.0 and Palm-size PC v1.2 platforms and to make matters worse the documentation does not exactly say what to make of the other Windows CE platforms. Since I targeted the Pocket Outlook Calendar application only, I did not need to tackle this issue. The installation script ensures that my CePimCommand function will be called only by the Calendar application.
+
+The other parameters to the function are pretty straightforward:
+
+* hWnd is a parent window handle
+
+* uDataCount specifies how many items (appointments, tasks, contacts) are currently selected
+
+* rghData points to an array of handles (CEOIDs) of the selected items
+
+The extension DLL must be registered under the HKEY_LOCAL_MACHINE key at "Software\Microsoft\PimApps\PimExtensions\<PIMAPP>\AddIns\<ExtName>", where <PIMAPP> is the appropriate Pocket Outlook application (i.e. Contacts, Tasks, or Calendar), and <ExtName> is any arbitrary name for your extension. Under the <ExtName> key, you must create two additional values:
+
+* "DLL" that identifies your DLL (e.g. "\Program Files\MoveAppt\MoveAppt.dll")
+
+* "Menu" that identifies the menu item to include under the "Tools" menu (e.g. "Move...")
+
+Note that the Pocket Outlook applications appear to check their respective extension lists only once when they start up. In other words, you must restart the application in order for the extension to show up under the "Tools" menu as shown in Figure 1. It is also worth mentioning that since the required CePimCommand function does not have a parameter that identifies the menu item for which it is being invoked, by definition each extension DLL can only offer a single unique menu item per each Pocket Outlook application.
+
+The CePimCommand function in MoveAppt.cpp (Listing 1) performs only a few preliminary checks before proceeding to display the city selection dialog. Namely, it verifies that there is only a single appointment selected and that the appointment is not all-day event or recurring appointment. I limited the extension to a single appointment mainly to save space and simplify the error handling; otherwise there is no particular reason why the code would not work with multiple appointments. Once the checks are done, the code instantiates a DlgData structure that is used to pass and maintain data within the dialog box. Before digging into the user interface code, I'll discuss the wrapper classes I developed for accessing the calendar data.
+
+Accessing The Calendar Data
+
+The POOM is exposed as a collection of COM interfaces defined in the PIMSTORE.H header file that comes with the POOM SDK. All of the interfaces are derived from the IDispatch interface to enable their use from Visual Basic. Using raw COM can get a little ugly so I developed lightweight wrappers around some of the POOM interfaces. The declarations in PolWrap.h (Listing 2) and PolWrap.cpp (Listing 3) utilize the ATL template class CComPtr to keep track of the interface pointers and the CComBSTR class to manage the BSTR strings returned by the POOM interfaces. Since both of these classes are declared inline in ATLBASE.H, the code does not need the actual ATL DLL.
+
+The COutlookApp class is the starting point for all other classes provided in PolWrap.cpp. The constructor acquires the initial IPOutlookApp interface pointer through a normal CoCreateInstance call, and then calls the IPOutlookApp::Logon method. The COutlookApp destructor in turn calls the IPOutlookApp::Logoff method before delegating the release of the interface pointer to the template class base destructor. The two additional methods, GetCities and GetCurrentCity are merely useful shortcuts to key POOM functionality needed by the utility. The GetCities method returns a COutlookCities object that allows the caller to enumerate the list of cities through the embedded IPOutlookItemCollection interface. The GetCurrentCity method returns a COutlookCity object that identifies the currently selected city that can be either the "Home" city or the "Visiting" city depending on the World Clock settings.
+
+The COutlookCities class hides some of the ugliness of the underlying IPOutlookItemCollection interface. The GetCount method is a convenient way to get the number of cities in the list, and the GetCity method returns the COutlookCity object that corresponds to the given 1-based index. The FindCity method is a rather ugly solution to a limitation of the POOM: I needed a way to search the city list based on both the full city name as well as the first letters of the city name. The former is needed in order to set the initial list view selection, while the latter is needed in order to support quick searches by first letters in the list view. Since the city list provided by POOM happens to be sorted by name, I was able to utilize a binary search to quickly find the city name. Unfortunately due to the characteristics of the binary search I have to resort to a backward linear search in order to locate the first match within a set of possible matches when searching by non-unique pattern such as the first letters of the city name.
+
+The COutlookCity class again provides some shortcuts to useful functionality. Namely, the GetName and GetTimeZone methods return the respective properties of the city object. The latter requires a bit more work, as first it needs to get the time zone index through the embedded ICity interface, and then it retrieves the corresponding ITimeZone interface pointer by calling the IPOutlookApp::GetTimeZoneFromIndex method.
+
+The COutlookTimeZone class provides nothing more than the GetBias method that simplifies the act of retrieving the time zone's bias, or the offset in minutes from the Universal Time Coordinated (UTC) based on the following formula:
+
+UTC = local time + bias
+
+Finally, the two remaining classes COutlookFolder and COutlookAppt are nothing more than prettier names for the ugly CComPtr template class declarations.
+
+The User Interface
+
+My initial implementation for the user interface used a basic list view that required me to enumerate through all 380+ cities known to Pocket Outlook in order to populate it. Unfortunately this takes a moment even on a 133MHz 32-bit Hitachi SH3 CPU, so I decided to look for a more elegant solution. I settled on adding the LVS_OWNERDATA style to the list view, thus turning it into a so-called virtual list view. It necessitates adding a little bit of complexity and code but speeds up the performance tremendously. The other alternative was using the list view callback mechanism (i.e. using the LPSTR_TEXTCALLBACK value) that ends up being just about as complex and does not offer the same performance improvement.
+
+The bulk of the work involved in the user interface happens in the OnInitDialog and OnOK functions in MoveAppt.cpp (Listing 1). The OnInitDialog function first initializes the list view control by adding the column headers and then sets the virtual list view item count equal to the number of the cities. Note that at this point I have still not added any actual list items to the list: the list view control will request them as needed with the LVN_GETDISPINFO code of the WM_NOTIFY message. Next the code retrieves the current city name using the POOM wrapper classes from PolWrap.cpp, and selects the respective list item in the list view. The ListView_FindItem call eventually winds up in the OnFindItem function, which uses the COutlookCities::FindCity method I mentioned earlier. The final touch is to turn on the software input panel (SIP) if it is supported by the platform, such as Palm-size PC or Pocket PC. If the SipShowIM function is not supported by the platform, the call won't even be included in the compilation thanks to an empty macro declaration earlier in the source file.
+
+The OnOK function is where the real fun begins. First it retrieves interface pointers to both the current local time zone as well as the new time zone through their respective city objects. Then it computes the delta bias between the two time zones, in other words how many minutes the appointment start time needs to be adjusted in order to move it to the new time zone. The POOM SDK returns the appointment date and time as an OLE DATE data type, which is an 8-byte floating-point value where the integer part is the date and the fractional part is the time within that date. Therefore, I divide the delta bias by the number of minutes in a day to get the fractional part, and add the resulting value to the appointment start date. Finally, the code stores the new appointment start time and saves the modified appointment object using the IAppointment::Save method. As with OnInitDialog, the final touch is to turn off the SIP if it is supported by the platform. This is done in the WM_COMMAND message handler of MoveDlgProc for both OK and Cancel buttons.
+
+I should note that the time zone delta bias computation does not take into account any differences in the daylight savings modes of the referenced time zones. Addressing this limitation would require a substantial amount of additional code for a relatively small return. In addition to that limitation, there are a couple of important things to note about the POOM SDK with respect to changing appointment objects. Namely:
+
+* The IAppointment::Save method does not trigger any refresh of the current Calendar application view, thus leaving it to show stale data. However, it does trigger a refresh over an ActiveSync connection to the desktop PC. I tried to figure out ways to force the Calendar application view to refresh, including calling InvalidateRect on various windows of the application or re-launching the application. None of these approaches were successful, so your only choice is to manually refresh the view.
+
+* You can set any one or two of the three appointment time properties (start time, end time, or duration), and the POOM SDK will calculate the other(s) from the new values.
+
+* If the appointment is recurring, modifying its start time will automatically move all instances of the appointment. It would have been possible to make an exception out of the currently selected appointment instance, but it would have taken a lot more code than I could justify for this article. Instead I chose to merely detect the situation and issue a warning, thus allowing the user to cancel the operation.
+
+* If the appointment is a meeting, the code should use the IAppointment::Send method instead of the IAppointment::Save method to save the changes in order to ensure that the attendees are properly notified.
+
+* I noticed that the bias returned by the ITimeZone object for some time zones contradicts information shown in the World Clock applet as well as the desktop versions of Windows. For example, the bias for Tokyo, Japan is returned as GMT+9.5 hours as opposed to GMT+9 hours according to the other sources.
+
+Compilation And Installation
+
+In theory the installation of this utility is simple: all you really need to do is to copy the DLL onto the Windows CE device, and add two keys into the registry in order to attach it to the Pocket Outlook Calendar application. In practice, things get a little bit more complicated. First, you have to make sure that the appropriate copy of the re-distributable PIMSTORE.DLL is already on the device, or bring your own. Second, you should close the Pocket Outlook Calendar application if it is running before installing or uninstalling the utility in order for the registry changes mentioned before to be recognized and to prevent crashing the application. Third, it would be nice to be able to use the ActiveSync facilities for installing and uninstalling applications.
+
+As strange as it may sound, I had to create no less than three auxiliary projects in order to accomplish all of the goals listed above - all this to install a 10KB DLL! Two are actual code projects, and one is a pseudo-project just to build the installation image. The code projects are fairly generic and simple so I won't go over the actual coding details here. The three projects included in the code archive are:
+
+* SetupDLL - this project produces a tiny Windows CE DLL that is called by ActiveSync before and after both installation and uninstallation. Its sole purpose in life is to close Pocket Outlook Calendar, if it is running. While it works fine during the installation, unfortunately it seems that it is called too late during the uninstallation on Palm-size PC platforms: if the Calendar application is running, it is terminated rather abruptly probably due to the fact that the PIMSTORE.DLL is being deleted underneath. When I tried the utility on a Handheld PC, the setup DLL was called before the uninstallation started.
+
+* SetupEXE - this project produces a tiny Win32 EXE that bootstraps the installation process by launching the ActiveSync Application Manager (i.e. the Add/Remove Programs functionality). It is only needed because the Application Manager is rather picky about getting an absolute path to the INI file that provides the installation data.
+
+* MakeCab - this pseudo-project copies files from all of the other projects, and then executes the Microsoft Cabinet Wizard tool to build the installation image.
+
+In order to build the entire project, you need to first build all the individual code projects taking care to build SH3, MIPS and ARM versions of the Windows CE based modules, and then build the MakeCab project to create the installation image. Thus end result of all this work is a neatly wrapped package that will install out of the box with minimal intervention by the user.
+
+Conclusions
+
+Extending the Pocket Outlook applications is certainly an interesting and challenging exercise. Debugging such extensions is painful at best, due to the way they interface with the applications. Moreover, the Pocket Outlook Calendar appears to be quite touchy about bugs in the extensions or their registration. For example, if you have incorrectly registered the extension DLL (e.g. the file is not there, or has the wrong name) and Calendar cannot find it, it will terminate abruptly without any warning or explanation whatsoever. By the way, this utility could be easily extended or adapted to manipulate the start dates and due dates of the Pocket Outlook Tasks as well.
+
+While I have tested the code successfully on several devices I cannot guarantee that it works on your particular device. The devices I had access to are:
+
+* HP Jornada 430se Palm-size PC: Windows CE v2.11, 133MHz Hitachi SH3 CPU, 16MB RAM, 4K colors
+
+* HP Jornada 680 Handheld PC: Windows CE v2.11, 133MHz Hitachi SH3 CPU, 16MB RAM, 64K colors
+
+* Compaq Aero 2180 Palm-size PC: Windows CE v2.11, 70MHz MIPS R4000 CPU, 24MB RAM, 64K colors
+
+* Compaq iPAQ H3630 Pocket PC: Windows CE v3.0, 206MHz Intel StrongARM SA1100 CPU, 32MB RAM, 4K colors
+
+The code archive contains binaries for SH3 and MIPS based Palm-size PCs running Windows CE v2.11 or later, and ARM based Pocket PCs running Windows CE v3.0.
+
+References
+
+[1] "Using the Pocket Outlook Object Model SDK" by Microsoft, http://msdn.microsoft.com/library/default.asp?URL=/library/techart/poomsdk.htm
+

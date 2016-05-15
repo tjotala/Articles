@@ -1,0 +1,108 @@
+[Version]
+Signature = "$Windows NT$"
+Provider = "WDJ"
+CESignature = "$Windows CE$"
+
+[CEDevice]
+VersionMin = 2.11
+VersionMax = 3.0
+
+[CEDevice.SH3]
+ProcessorType = 10003 ; Hitachi SH3
+
+[CEDevice.MIPS]
+ProcessorType = 4000 ; MIPS R4xxx
+
+[CEDevice.ARM]
+ProcessorType = 2577 ; StrongARM SA11xx
+VersionMin = 3.0
+
+[DefaultInstall]
+AddReg = RegSettings.Common
+CESelfRegister = pimstore.dll
+CESetupDLL = setup.dll
+
+[DefaultInstall.SH3]
+CopyFiles = CopyToInstallDir,CopyToInstallDir.SH3,CopyToWindowsDir.SH3
+
+[DefaultInstall.MIPS]
+CopyFiles = CopyToInstallDir,CopyToInstallDir.MIPS,CopyToWindowsDir.MIPS
+
+[DefaultInstall.ARM]
+CopyFiles = CopyToInstallDir,CopyToInstallDir.ARM,CopyToWindowsDir.ARM
+
+[RegSettings.Common]
+HKLM,%InstallReg%\MoveAppt,"Dll",0x00000000,"%InstallDir%\MoveAppt.dll"
+HKLM,%InstallReg%\MoveAppt,"Menu",0x00000000,%MenuName%
+
+[CopyToInstallDir]
+MoveAppt.ico,,,0x00000000
+
+[CopyToInstallDir.SH3]
+MoveAppt.dll,,,0x00000000
+setup.dll,,,0x00000000
+
+[CopyToWindowsDir.SH3]
+pimstore.dll,,,0xc0000012 ; no skip/no date check/no overwrite/shared
+
+[CopyToInstallDir.MIPS]
+MoveAppt.dll,,,0x00000000
+setup.dll,,,0x00000000
+
+[CopyToWindowsDir.MIPS]
+pimstore.dll,,,0xc0000012 ; no skip/no date check/no overwrite/shared
+
+[CopyToInstallDir.ARM]
+MoveAppt.dll,,,0x00000000
+setup.dll,,,0x00000000
+
+[CopyToWindowsDir.ARM]
+pimstore.dll,,,0xc0000012 ; no skip/no date check/no overwrite/shared
+
+[SourceDisksNames]
+1 = ,"Common files",,.
+
+[SourceDisksNames.SH3]
+2 = ,"SH3 files",,..\Temp\SH3
+
+[SourceDisksNames.MIPS]
+2 = ,"MIPS files",,..\Temp\MIPS
+
+[SourceDisksNames.ARM]
+2 = ,"ARM files",,..\Temp\ARM
+
+[SourceDisksFiles]
+MoveAppt.ico = 1
+
+[SourceDisksFiles.SH3]
+MoveAppt.dll = 2
+setup.dll = 2
+pimstore.dll = 2
+
+[SourceDisksFiles.MIPS]
+MoveAppt.dll = 2
+setup.dll = 2
+pimstore.dll = 2
+
+[SourceDisksFiles.ARM]
+MoveAppt.dll = 2
+setup.dll = 2
+pimstore.dll = 2
+
+[DestinationDirs]
+CopyToInstallDir      = 0,%InstallDir%
+CopyToInstallDir.SH3  = 0,%InstallDir%
+CopyToInstallDir.MIPS = 0,%InstallDir%
+CopyToInstallDir.ARM  = 0,%InstallDir%
+CopyToWindowsDir.SH3  = 0,%CE2% ; \Windows
+CopyToWindowsDir.MIPS = 0,%CE2% ; \Windows
+CopyToWindowsDir.ARM  = 0,%CE2% ; \Windows
+DefaultDestDir        = 0,%InstallDir%
+
+[Strings]
+InstallReg = "Software\Microsoft\PimApps\PimExtensions\Calendar\AddIns"
+MenuName = "Move..."
+
+[CEStrings]
+AppName = "Move Appointment"
+InstallDir = %CE1%\MoveAppt ; \Program Files\MoveAppt

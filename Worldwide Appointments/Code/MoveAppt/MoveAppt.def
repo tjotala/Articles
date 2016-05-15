@@ -1,0 +1,2 @@
+LIBRARY MoveAppt
+EXPORTS CePimCommand @1 PRIVATE
